@@ -1,5 +1,6 @@
 from data.base_dataset import BaseDataset, get_transform
 from data.image_folder import make_dataset
+import torchvision.transforms as transforms
 import os
 import imageio
 import numpy as np
@@ -28,7 +29,7 @@ class VolumeDataset(BaseDataset):
             the modified parser.
         """
         parser.add_argument('--input_size', nargs='+',type=int, default=[96,96,96], help="Model's input size")
-        parser.add_argument('--stride', nargs='+',type=int, help="Stride between subvolumes selection", required=True)#!MB
+        parser.add_argument('--stride', nargs='+',type=int, help="Stride between subvolumes selection", required=True)
 #         self.initialized = True
         parser.set_defaults(max_dataset_size=10, new_dataset_option=2.0)  # specify dataset-specific default values
         return parser
@@ -74,6 +75,7 @@ class VolumeDataset(BaseDataset):
         self.B_sample_num_a = np.sum(self.B_sample_num)
         self.A_sample_num_c = np.cumsum([0] + list(self.A_sample_num))
         self.B_sample_num_c = np.cumsum([0] + list(self.B_sample_num))
+        self.transform = transforms.Compose(transforms.Normalize((0.5,), (0.5,)))
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -85,8 +87,13 @@ class VolumeDataset(BaseDataset):
             a dictionary of data with their names. It usually contains the data itself and its metadata information.
         """
         pos_A, pos_B = self._get_pos_train(self.sample_volume_size)
+#         out_A = torch.from_numpy((crop_volume(self.A_data[pos_A[0]], self.sample_volume_size, pos_A[1:])/255.0).astype(np.float32)).unsqueeze(0) # Add batch dimension
+#         out_B = torch.from_numpy((crop_volume(self.B_data[pos_B[0]], self.sample_volume_size, pos_B[1:])/255.0).astype(np.float32)).unsqueeze(0)
         out_A = torch.from_numpy((crop_volume(self.A_data[pos_A[0]], self.sample_volume_size, pos_A[1:])/255.0).astype(np.float32))
+        # Normalize between -1 and 1 for tanh generator layer
+        out_A = ((out_A - 0.5)/0.5).unsqueeze(0)
         out_B = torch.from_numpy((crop_volume(self.B_data[pos_B[0]], self.sample_volume_size, pos_B[1:])/255.0).astype(np.float32))
+        out_B = ((out_B - 0.5)/0.5).unsqueeze(0)
         return {'A': out_A, 'B': out_B, 'A_paths': self.A_paths, 'B_paths': self.B_paths}
 
     def __len__(self):
@@ -123,6 +130,7 @@ if __name__ == '__main__':
     dataset = VolumeDataset(opt)
     print(dataset.dir_B, dataset.B_paths, dataset.B_size)
     print(dataset.B_input_size, dataset.sample_volume_size)
-    print(dataset[0]['data_A'].shape)
+    print(dataset[1000]['B'].shape)
+    print(dataset[2000]['A'].shape)
     from matplotlib import pyplot as plt
-    plt.imsave("./t.png",dataset[20]['data_B'][0] ,cmap="gray")
+    plt.imsave("./t.png",dataset[20]['B'][0,0] ,cmap="gray")
